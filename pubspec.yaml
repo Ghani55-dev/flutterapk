@@ -70,6 +70,12 @@ dependencies:
   # Audio playback for TTS
   just_audio: ^0.10.5
   audio_session: ^0.2.3
+  # Admin dashboard charts
+  fl_chart: ^1.2.0
+  intl: ^0.20.2
+  # Image picker for file selection
+  image_picker: ^1.0.0
+
 
 dev_dependencies:
   flutter_test:

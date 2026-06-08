@@ -35,6 +35,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> login({required String email, required String password, String? deviceId, String? fcmToken}) async {
     final ok = await repository.login(email: email, password: password, deviceId: deviceId, fcmToken: fcmToken);
     if (!ok) return false;
+    
     final user = await repository.me();
     if (user != null) {
       state = AuthState.authenticated(user);

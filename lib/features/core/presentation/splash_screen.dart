@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/config/app_config.dart';
+import '../../../providers/admin_providers.dart';
 import '../../../providers/core_providers.dart';
 import '../../auth/auth_controller.dart';
 
@@ -56,7 +57,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     if (!mounted) return;
 
     if (auth.status == AuthStatus.authenticated) {
-      context.go('/');
+      // If this is an admin user, also restore the admin auth state so
+      // admin panel routes stay accessible.
+      final user = auth.user;
+      if (user != null && user.isAdmin) {
+        final tokenManager = ref.read(tokenManagerProvider);
+        final access = await tokenManager.getAccessToken();
+        final refresh = await tokenManager.getRefreshToken();
+        if (access != null && refresh != null) {
+          final adminAuth = ref.read(adminAuthNotifierProvider);
+          if (adminAuth.status != AdminAuthStatus.authenticated) {
+            await ref.read(adminAuthNotifierProvider.notifier).loginWithTokens(
+              access: access,
+              refresh: refresh,
+              user: {
+                'id': user.rawId,
+                'email': user.email,
+                'full_name': user.name ?? '',
+                'is_admin': true,
+              },
+            );
+          }
+        }
+        if (mounted) context.go('/admin/dashboard');
+      } else {
+        context.go('/');
+      }
       return;
     }
 

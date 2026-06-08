@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../providers/admin_providers.dart';
+import '../../../providers/core_providers.dart';
 import '../auth_controller.dart';
 import 'widgets/auth_brand_header.dart';
 
@@ -42,7 +44,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
       if (!mounted) return;
       if (ok) {
-        context.go('/');
+        // Get the authenticated user - adding a small delay to ensure state is updated
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        final authState = ref.read(authNotifierProvider);
+        final user = authState.user;
+        
+        if (user != null && user.isAdmin) {
+          // Bridge the admin auth state with the same tokens so the admin
+          // panel routes work without requiring a separate admin login.
+          try {
+            final tokenManager = ref.read(tokenManagerProvider);
+            final access = await tokenManager.getAccessToken();
+            final refresh = await tokenManager.getRefreshToken();
+            
+            if (access != null && refresh != null) {
+              final userMap = <String, dynamic>{
+                'id': user.rawId,
+                'email': user.email,
+                'full_name': user.name ?? '',
+                'is_admin': true,
+              };
+              
+              // Authenticate the admin and then redirect
+              await ref.read(adminAuthNotifierProvider.notifier).loginWithTokens(
+                    access: access,
+                    refresh: refresh,
+                    user: userMap,
+                  );
+              
+              if (mounted) {
+                context.go('/admin/dashboard');
+              }
+            } else {
+              // Tokens not available, redirect to home
+              if (mounted) context.go('/');
+            }
+          } catch (e) {
+            // Error setting up admin auth, still redirect to home as regular user
+            if (mounted) context.go('/');
+          }
+        } else {
+          // Regular user login
+          if (mounted) context.go('/');
+        }
       } else {
         setState(() => _formError = 'We could not sign you in. Please check your details.');
       }

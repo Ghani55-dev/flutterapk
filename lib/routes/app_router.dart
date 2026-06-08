@@ -41,11 +41,65 @@ import '../features/ugc/presentation/ugc_submission_success_screen.dart';
 import '../features/ugc/presentation/ugc_feed_screen.dart';
 import '../features/ugc/data/ugc_models.dart';
 
+// Admin imports
+import '../features/admin/auth/admin_login_screen.dart';
+import '../features/admin/dashboard/admin_dashboard_screen.dart';
+import '../features/admin/articles/admin_articles_screen.dart';
+import '../features/admin/ugc/admin_ugc_screen.dart';
+import '../features/admin/users/admin_users_screen.dart';
+import '../features/admin/analytics/admin_analytics_screen.dart';
+import '../features/admin/notifications/admin_notifications_screen.dart';
+import '../features/admin/polls/admin_polls_screen.dart';
+import '../features/admin/epapers/admin_epapers_screen.dart';
+import '../features/admin/search_logs/admin_search_logs_screen.dart';
+import '../features/admin/cms/admin_cms_screen.dart';
+import '../features/admin/quotes/admin_quotes_screen.dart';
+import '../features/admin/system/admin_system_screen.dart';
+import '../providers/admin_providers.dart';
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   String? redirectLogic(GoRouterState state) {
-    final auth = ref.read(authNotifierProvider);
-
     final location = state.location;
+
+    // Check if accessing admin route
+    if (location.startsWith('/admin')) {
+      final adminAuth = ref.read(adminAuthNotifierProvider);
+      
+      if (location == '/admin/login') {
+        if (adminAuth.status == AdminAuthStatus.authenticated) {
+          return '/admin/dashboard';
+        }
+        return null;
+      }
+      
+      if (adminAuth.status == AdminAuthStatus.unauthenticated) {
+        return '/admin/login';
+      }
+      return null;
+    }
+
+    // Standard user redirect logic
+    final auth = ref.read(authNotifierProvider);
+    final adminAuth = ref.read(adminAuthNotifierProvider);
+    
+    // If admin is logged in via admin auth, prevent access to regular user routes
+    // and redirect to admin dashboard
+    if (adminAuth.status == AdminAuthStatus.authenticated) {
+      final isAdminRoute = location.startsWith('/admin');
+      final isPublicRoute = location == '/splash' || 
+                          location == '/about' || 
+                          location == '/privacy' || 
+                          location == '/terms' || 
+                          location == '/help' ||
+                          location.startsWith('/guest-') ||
+                          location.startsWith('/article/');
+      
+      if (!isAdminRoute && !isPublicRoute) {
+        // Redirect to admin dashboard
+        return '/admin/dashboard';
+      }
+    }
+    
     final isAuthenticatedHome = location == '/' || location == '/polls';
     final isProtectedLocation = isAuthenticatedHome ||
         location == '/settings' ||
@@ -74,7 +128,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     initialLocation: '/splash',
-    refreshListenable: GoRouterRefreshStream(ref.watch(authNotifierProvider.notifier).changes),
+    refreshListenable: GoRouterRefreshStream(
+      ref.watch(authNotifierProvider.notifier).changes,
+      ref.watch(adminAuthNotifierProvider.notifier).changes,
+    ),
     redirect: (context, state) => redirectLogic(state),
     routes: [
       GoRoute(path: '/splash', builder: (c, s) => const SplashScreen()),
@@ -156,19 +213,42 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         );
       }),
       GoRoute(path: '/community/feed', builder: (c, s) => ProtectedRoute(child: const UGCFeedScreen())),
+
+      // Admin Panel Routes
+      GoRoute(path: '/admin', redirect: (context, state) => '/admin/dashboard'),
+      GoRoute(path: '/admin/login', builder: (c, s) => const AdminLoginScreen()),
+      GoRoute(path: '/admin/dashboard', builder: (c, s) => const AdminDashboardScreen()),
+      GoRoute(path: '/admin/articles', builder: (c, s) => const AdminArticlesScreen()),
+      GoRoute(path: '/admin/ugc', builder: (c, s) => const AdminUgcScreen()),
+      GoRoute(path: '/admin/users', builder: (c, s) => const AdminUsersScreen()),
+      GoRoute(path: '/admin/analytics', builder: (c, s) => const AdminAnalyticsScreen()),
+      GoRoute(path: '/admin/notifications', builder: (c, s) => const AdminNotificationsScreen()),
+      GoRoute(path: '/admin/polls', builder: (c, s) => const AdminPollsScreen()),
+      GoRoute(path: '/admin/epapers', builder: (c, s) => const AdminEpapersScreen()),
+      GoRoute(path: '/admin/search-logs', builder: (c, s) => const AdminSearchLogsScreen()),
+      GoRoute(path: '/admin/cms', builder: (c, s) => const AdminCmsScreen()),
+      GoRoute(path: '/admin/quotes', builder: (c, s) => const AdminQuotesScreen()),
+      GoRoute(path: '/admin/system', builder: (c, s) => const AdminSystemScreen()),
     ],
   );
 });
 
-// Helper to adapt Riverpod StateNotifier to GoRouter's refreshListenable
+// Helper to adapt multiple streams/notifiers to GoRouter's refreshListenable
 class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(Stream<dynamic> stream) {
-    _sub = stream.listen((_) => notifyListeners());
+  late final List<StreamSubscription> _subscriptions;
+
+  GoRouterRefreshStream(Stream<dynamic> stream1, Stream<dynamic> stream2) {
+    _subscriptions = [
+      stream1.listen((_) => notifyListeners()),
+      stream2.listen((_) => notifyListeners()),
+    ];
   }
-  late final StreamSubscription _sub;
+
   @override
   void dispose() {
-    _sub.cancel();
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
     super.dispose();
   }
 }
